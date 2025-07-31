@@ -15,7 +15,11 @@ if 'processos_lista' not in st.session_state:
     st.session_state.processos_lista = []
 
 # Escolha de modo de entrada
-modo = st.radio("Como você deseja inserir os dados?", ["📁 Upload de arquivos", "✍️ Cadastro manual"])
+modo = st.radio(
+    "Como você deseja inserir os dados?",
+    ["📁 Upload de arquivos", "✍️ Cadastro manual"],
+    index=1  # Define "Cadastro manual" como opção inicial
+)
 
 # Inicializa os DataFrames
 df_adv = pd.DataFrame()
@@ -124,16 +128,16 @@ df_adv = pd.DataFrame(st.session_state.advogados_lista)
 df_proc = pd.DataFrame(st.session_state.processos_lista)
 
 # Visualização formatada
-st.markdown("### 👁️ Visualização Formatada de Advogados")
 if not df_adv.empty:
+    st.markdown("### 👁️ Visualização Formatada de Advogados")
     df_adv_formatado = df_adv.copy()
     df_adv_formatado["custo_direto_anual"] = df_adv_formatado["custo_direto_anual"].apply(
         lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     )
     st.dataframe(df_adv_formatado, hide_index=True)
 
-st.markdown("### 👁️ Visualização Formatada de Processos")
 if not df_proc.empty:
+    st.markdown("### 👁️ Visualização Formatada de Processos")
     df_proc_formatado = df_proc.copy()
     df_proc_formatado["valor_recebido"] = df_proc_formatado["valor_recebido"].apply(
         lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
