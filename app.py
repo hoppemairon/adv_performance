@@ -39,15 +39,52 @@ with st.sidebar:
 # 📁 Modo de Upload
 # -------------------
 if modo == "📁 Upload de arquivos":
-    with st.expander("📥 Enviar arquivos CSV"):
-        advogados = st.file_uploader("📁 Envie o arquivo de advogados", type=["csv"])
-        processos = st.file_uploader("📁 Envie o arquivo de processos", type=["csv"])
+    with st.expander("📥 Enviar arquivos Excel"):
+        import io
+        import pandas as pd
+
+        # Modelos de DataFrame
+        modelo_adv = pd.DataFrame({
+            "advogado_id": ["12345"],
+            "nome": ["Exemplo Advogado"],
+            "custo_direto_anual": [10000.00]
+        })
+        modelo_proc = pd.DataFrame({
+            "processo_id": ["PROC001"],
+            "valor_recebido": [50000.00],
+            "advogado_id": ["12345"],
+            "participacao (%)": [100.0]
+        })
+
+        # Cria arquivos Excel em memória para cada modelo
+        buffer_adv = io.BytesIO()
+        modelo_adv.to_excel(buffer_adv, index=False)
+        buffer_adv.seek(0)
+
+        buffer_proc = io.BytesIO()
+        modelo_proc.to_excel(buffer_proc, index=False)
+        buffer_proc.seek(0)
+
+        advogados = st.file_uploader("📁 Envie o arquivo de advogados", type=["xlsx"])
+        st.download_button(
+            label="📥 Baixar modelo Advogados (Excel)",
+            data=buffer_adv,
+            file_name="modelo_advogados.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        processos = st.file_uploader("📁 Envie o arquivo de processos", type=["xlsx"])
+        st.download_button(
+            label="📥 Baixar modelo Processos (Excel)",
+            data=buffer_proc,
+            file_name="modelo_processos.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
         custo_manual = st.number_input("🏢 Informe o valor total de custo fixo anual (R$)", min_value=0.0, format="%.2f")
         rateio_manual = st.number_input("👥 Número total de pessoas para rateio", min_value=1, step=1)
 
         if advogados and processos:
-            df_adv = pd.read_csv(advogados)
-            df_proc = pd.read_csv(processos)
+            df_adv = pd.read_excel(advogados)
+            df_proc = pd.read_excel(processos)
             total_custo_fixo = custo_manual
             qtd_rateio = rateio_manual
 
