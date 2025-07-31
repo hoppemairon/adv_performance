@@ -2,6 +2,28 @@ import pandas as pd
 import numpy as np
 
 def calcular_resultado(advogados_df, processos_df, total_custo_fixo, qtd_rateio, aliquota_imposto=0.0):
+    # Garante que df_proc tenha as colunas esperadas mesmo se estiver vazio
+    if processos_df.empty or "valor_recebido" not in processos_df.columns:
+        resultados = []
+        for _, adv in advogados_df.iterrows():
+            custo_direto = adv["custo_direto_anual"]
+            custo_fixo = total_custo_fixo / qtd_rateio
+            receita = 0.0
+            imposto = 0.0
+            resultado_liquido = - (custo_direto + custo_fixo)
+            receita_necessaria_positivo = (custo_direto + custo_fixo) / (1 - aliquota_imposto / 100) if resultado_liquido < 0 else 0.0
+            resultados.append({
+                "advogado_id": adv["advogado_id"],
+                "nome": adv["nome"],
+                "receita_advogado": receita,
+                "imposto": imposto,
+                "custo_direto_anual": custo_direto,
+                "custo_fixo_rateado": custo_fixo,
+                "resultado_liquido": resultado_liquido,
+                "receita_necessaria_positivo": receita_necessaria_positivo
+            })
+        return pd.DataFrame(resultados)
+
     # Aplicar imposto
     processos_df["valor_recebido_liquido"] = processos_df["valor_recebido"] * (1 - aliquota_imposto / 100)
 

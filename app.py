@@ -111,11 +111,17 @@ elif modo == "✍️ Cadastro manual":
 with st.expander("✍️ Editar Valores"):
     if st.session_state.advogados_lista:
         st.markdown("### ✏️ Editar Lista de Advogados")
-        df_adv = st.data_editor(pd.DataFrame(st.session_state.advogados_lista), num_rows="dynamic")
+        df_adv_editado = st.data_editor(pd.DataFrame(st.session_state.advogados_lista), num_rows="dynamic", hide_index=True)
+        st.session_state.advogados_lista = df_adv_editado.to_dict(orient="records")
 
     if st.session_state.processos_lista:
         st.markdown("### ✏️ Editar Lista de Processos")
-        df_proc = st.data_editor(pd.DataFrame(st.session_state.processos_lista), num_rows="dynamic")
+        df_proc_editado = st.data_editor(pd.DataFrame(st.session_state.processos_lista), num_rows="dynamic", hide_index=True)
+        st.session_state.processos_lista = df_proc_editado.to_dict(orient="records")
+
+# Atualiza os DataFrames com o conteúdo atual do session_state (sempre)
+df_adv = pd.DataFrame(st.session_state.advogados_lista)
+df_proc = pd.DataFrame(st.session_state.processos_lista)
 
 # Visualização formatada
 st.markdown("### 👁️ Visualização Formatada de Advogados")
@@ -163,9 +169,9 @@ with st.expander("ℹ️ Como o resultado é calculado?"):
 # -------------------
 # Resultado sob comando
 # -------------------
-if not df_adv.empty and not df_proc.empty and total_custo_fixo > 0:
+# Permite cálculo mesmo se df_proc estiver vazio
+if not df_adv.empty and total_custo_fixo > 0:
     if st.button("📊 Calcular Resultado Financeiro"):
-        # Passa a alíquota do imposto para a função de cálculo
         resultado_df = calcular_resultado(
             df_adv, df_proc, total_custo_fixo, qtd_rateio, aliquota_imposto
         )
