@@ -23,6 +23,14 @@ df_proc = pd.DataFrame()
 total_custo_fixo = 0
 qtd_rateio = 1
 
+# Adiciona campo para alíquota do imposto
+with st.sidebar:
+    st.header("⚙️ Configurações Gerais")
+    aliquota_imposto = st.number_input(
+        "Alíquota do imposto (%) sobre o valor recebido dos processos",
+        min_value=0.0, max_value=100.0, value=0.0, step=0.1, format="%.2f"
+    )
+
 # -------------------
 # 📁 Modo de Upload
 # -------------------
@@ -116,7 +124,7 @@ if not df_adv.empty:
     df_adv_formatado["custo_direto_anual"] = df_adv_formatado["custo_direto_anual"].apply(
         lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     )
-    st.dataframe(df_adv_formatado)
+    st.dataframe(df_adv_formatado, hide_index=True)
 
 st.markdown("### 👁️ Visualização Formatada de Processos")
 if not df_proc.empty:
@@ -124,7 +132,7 @@ if not df_proc.empty:
     df_proc_formatado["valor_recebido"] = df_proc_formatado["valor_recebido"].apply(
         lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     )
-    st.dataframe(df_proc_formatado)
+    st.dataframe(df_proc_formatado, hide_index=True)
 
 # -------------------
 # Explicação dos Cálculos
@@ -136,6 +144,7 @@ with st.expander("ℹ️ Como o resultado é calculado?"):
     1. **Receita atribuída ao advogado**:
        - Cada processo possui um valor recebido pelo escritório.
        - Esse valor é distribuído entre os advogados conforme o percentual de participação informado.
+       - **Desconta-se o imposto informado sobre o valor recebido.**
 
     2. **Custo direto**:
        - É o total pago ao advogado no ano (ex: salário ou honorário fixo).
@@ -144,7 +153,11 @@ with st.expander("ℹ️ Como o resultado é calculado?"):
        - Valor informado manualmente, dividido igualmente entre o número de pessoas definidas para rateio.
 
     4. **Resultado líquido por advogado**:
-       - Calculado como: `Receita atribuída - (Custo direto + Custo fixo rateado)`
+       - Calculado como: `Receita atribuída líquida - (Custo direto + Custo fixo rateado)`
+       - Receita líquida = Receita atribuída - Imposto
+
+    5. **Receita necessária para ficar positivo**:
+       - Caso o resultado seja negativo, mostra quanto o advogado deveria ter recebido de processos para o resultado líquido ser zero.
     """)
 
 # -------------------
@@ -152,7 +165,10 @@ with st.expander("ℹ️ Como o resultado é calculado?"):
 # -------------------
 if not df_adv.empty and not df_proc.empty and total_custo_fixo > 0:
     if st.button("📊 Calcular Resultado Financeiro"):
-        resultado_df = calcular_resultado(df_adv, df_proc, total_custo_fixo, qtd_rateio)
+        # Passa a alíquota do imposto para a função de cálculo
+        resultado_df = calcular_resultado(
+            df_adv, df_proc, total_custo_fixo, qtd_rateio, aliquota_imposto
+        )
         st.session_state.resultado_df = resultado_df
 
     if "resultado_df" in st.session_state:
@@ -161,10 +177,36 @@ if not df_adv.empty and not df_proc.empty and total_custo_fixo > 0:
         st.subheader("📄 Resultado por Advogado")
 
         resultado_formatado = resultado_df.copy()
-        for col in ["receita_advogado", "custo_direto_anual", "custo_fixo_rateado", "resultado_liquido"]:
-            resultado_formatado[col] = resultado_formatado[col].apply(lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+        # Remove colunas de índice e a coluna duplicada de valor necessário, se existirem
+        for col in ["index", "Unnamed: 0", "valor_necessario_para_equilibrar"]:
+            if col in resultado_formatado.columns:
+                resultado_formatado = resultado_formatado.drop(columns=[col])
 
-        st.dataframe(resultado_formatado)
+        # Formatação das colunas em reais (antes de renomear)
+        for col in ["receita_advogado", "imposto", "custo_direto_anual", "custo_fixo_rateado", "resultado_liquido"]:
+            if col in resultado_formatado.columns:
+                resultado_formatado[col] = resultado_formatado[col].apply(
+                    lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                )
+        # Renomeie as colunas aqui, depois da formatação das demais colunas
+        resultado_formatado = resultado_formatado.rename(columns={
+            "advogado_id": "OAB",
+            "nome": "Nome",
+            "receita_advogado": "Receita Advogado",
+            "imposto": "Imposto",
+            "custo_direto_anual": "Custo Direto Anual",
+            "custo_fixo_rateado": "Custo Fixo Rateado",
+            "resultado_liquido": "Resultado Líquido",
+            "receita_necessaria_positivo": "Receita Necessária p/ Equilibrar"
+        })
+
+        # Formatação específica para a coluna já renomeada
+        if "Receita Necessária p/ Equilibrar" in resultado_formatado.columns:
+            resultado_formatado["Receita Necessária p/ Equilibrar"] = resultado_formatado["Receita Necessária p/ Equilibrar"].apply(
+                lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if x not in ["", None] and pd.notna(x) and x != 0 else ""
+            )
+
+        st.dataframe(resultado_formatado, hide_index=True)
 
         with st.expander("📈 Visualização Gráfica", expanded=True):
             nomes_adv = resultado_df["nome"].unique().tolist()
@@ -172,14 +214,17 @@ if not df_adv.empty and not df_proc.empty and total_custo_fixo > 0:
 
             dados_adv = resultado_df[resultado_df["nome"] == adv_selecionado].iloc[0]
 
-            labels = ["Receita", "Custo Direto", "Custo Fixo", "Resultado"]
+            labels = ["Receita", "Imposto", "Custo Direto", "Custo Fixo", "Resultado"]
             valores = [
                 dados_adv["receita_advogado"],
+                -dados_adv["imposto"],
                 -dados_adv["custo_direto_anual"],
                 -dados_adv["custo_fixo_rateado"],
                 dados_adv["resultado_liquido"]
             ]
-            cores = ["green", "red", "orange", "black"]
+            # Define cor da receita como azul e resultado conforme positivo/negativo
+            cor_resultado = "green" if dados_adv["resultado_liquido"] >= 0 else "red"
+            cores = ["blue", "purple", "orange", "gray", cor_resultado]
 
             fig, ax = plt.subplots(figsize=(8, 5))
             ax.bar(labels, valores, color=cores)
