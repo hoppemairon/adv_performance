@@ -65,14 +65,14 @@ if modo == "📁 Upload de arquivos":
         modelo_proc.to_excel(buffer_proc, index=False)
         buffer_proc.seek(0)
 
-        advogados = st.file_uploader("📁 Envie o arquivo de advogados", type=["xlsx"])
+        advogados = st.file_uploader("📁 Envie o arquivo de advogados", type=["xlsx", "csv"])
         st.download_button(
             label="📥 Baixar modelo Advogados (Excel)",
             data=buffer_adv,
             file_name="modelo_advogados.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-        processos = st.file_uploader("📁 Envie o arquivo de processos", type=["xlsx"])
+        processos = st.file_uploader("📁 Envie o arquivo de processos", type=["xlsx", "csv"])
         st.download_button(
             label="📥 Baixar modelo Processos (Excel)",
             data=buffer_proc,
@@ -82,9 +82,32 @@ if modo == "📁 Upload de arquivos":
         custo_manual = st.number_input("🏢 Informe o valor total de custo fixo anual (R$)", min_value=0.0, format="%.2f")
         rateio_manual = st.number_input("👥 Número total de pessoas para rateio", min_value=1, step=1)
 
+        from utils.importacao import importar_arquivo
+        #if advogados:
+        #    df_adv_upload = importar_arquivo(advogados)
+        #    st.markdown("#### Pré-visualização dos Advogados Importados")
+        #    if df_adv_upload.empty:
+        #        st.warning("Nenhum dado de advogado foi importado. Verifique o arquivo enviado.")
+        #    else:
+        #        st.dataframe(df_adv_upload, hide_index=True)
+        #        colunas_esperadas = {"advogado_id", "nome", "custo_direto_anual"}
+        #        if not colunas_esperadas.issubset(df_adv_upload.columns):
+        #            st.error(f"O arquivo de advogados está faltando colunas obrigatórias: {colunas_esperadas - set(df_adv_upload.columns)}")
+        #        st.session_state.advogados_lista = df_adv_upload.to_dict(orient="records")
+#
+        #if processos:
+        #    df_proc_upload = importar_arquivo(processos)
+        #    st.markdown("#### Pré-visualização dos Processos Importados")
+        #    if df_proc_upload.empty:
+        #        st.warning("Nenhum dado de processo foi importado. Verifique o arquivo enviado.")
+        #    else:
+        #        st.dataframe(df_proc_upload, hide_index=True)
+        #        colunas_esperadas_proc = {"processo_id", "valor_recebido", "advogado_id", "participacao (%)"}
+        #        if not colunas_esperadas_proc.issubset(df_proc_upload.columns):
+        #            st.error(f"O arquivo de processos está faltando colunas obrigatórias: {colunas_esperadas_proc - set(df_proc_upload.columns)}")
+        #        st.session_state.processos_lista = df_proc_upload.to_dict(orient="records")
+
         if advogados and processos:
-            df_adv = pd.read_excel(advogados)
-            df_proc = pd.read_excel(processos)
             total_custo_fixo = custo_manual
             qtd_rateio = rateio_manual
 
@@ -210,75 +233,83 @@ with st.expander("ℹ️ Como o resultado é calculado?"):
 # -------------------
 # Resultado sob comando
 # -------------------
-# Permite cálculo mesmo se df_proc estiver vazio
-if not df_adv.empty and total_custo_fixo > 0:
-    if st.button("📊 Calcular Resultado Financeiro"):
+
+st.markdown("---")
+st.header("📊 Calcular Resultado Financeiro")
+calcular = st.button("Calcular")
+
+if calcular:
+    if df_adv.empty:
+        st.error("Cadastre ou importe ao menos um advogado.")
+    elif total_custo_fixo <= 0:
+        st.error("Informe o valor total de custo fixo anual.")
+    else:
         resultado_df = calcular_resultado(
             df_adv, df_proc, total_custo_fixo, qtd_rateio, aliquota_imposto
         )
         st.session_state.resultado_df = resultado_df
 
-    if "resultado_df" in st.session_state:
-        resultado_df = st.session_state.resultado_df
+if "resultado_df" in st.session_state:
+    resultado_df = st.session_state.resultado_df
 
-        st.subheader("📄 Resultado por Advogado")
+    st.subheader("📄 Resultado por Advogado")
 
-        resultado_formatado = resultado_df.copy()
-        # Remove colunas de índice e a coluna duplicada de valor necessário, se existirem
-        for col in ["index", "Unnamed: 0", "valor_necessario_para_equilibrar"]:
-            if col in resultado_formatado.columns:
-                resultado_formatado = resultado_formatado.drop(columns=[col])
+    resultado_formatado = resultado_df.copy()
+    # Remove colunas de índice e a coluna duplicada de valor necessário, se existirem
+    for col in ["index", "Unnamed: 0", "valor_necessario_para_equilibrar"]:
+        if col in resultado_formatado.columns:
+            resultado_formatado = resultado_formatado.drop(columns=[col])
 
-        # Formatação das colunas em reais (antes de renomear)
-        for col in ["receita_advogado", "imposto", "custo_direto_anual", "custo_fixo_rateado", "resultado_liquido"]:
-            if col in resultado_formatado.columns:
-                resultado_formatado[col] = resultado_formatado[col].apply(
-                    lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                )
-        # Renomeie as colunas aqui, depois da formatação das demais colunas
-        resultado_formatado = resultado_formatado.rename(columns={
-            "advogado_id": "OAB",
-            "nome": "Nome",
-            "receita_advogado": "Receita Advogado",
-            "imposto": "Imposto",
-            "custo_direto_anual": "Custo Direto Anual",
-            "custo_fixo_rateado": "Custo Fixo Rateado",
-            "resultado_liquido": "Resultado Líquido",
-            "receita_necessaria_positivo": "Receita Necessária p/ Equilibrar"
-        })
-
-        # Formatação específica para a coluna já renomeada
-        if "Receita Necessária p/ Equilibrar" in resultado_formatado.columns:
-            resultado_formatado["Receita Necessária p/ Equilibrar"] = resultado_formatado["Receita Necessária p/ Equilibrar"].apply(
-                lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if x not in ["", None] and pd.notna(x) and x != 0 else ""
+    # Formatação das colunas em reais (antes de renomear)
+    for col in ["receita_advogado", "imposto", "custo_direto_anual", "custo_fixo_rateado", "resultado_liquido"]:
+        if col in resultado_formatado.columns:
+            resultado_formatado[col] = resultado_formatado[col].apply(
+                lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             )
+    # Renomeie as colunas aqui, depois da formatação das demais colunas
+    resultado_formatado = resultado_formatado.rename(columns={
+        "advogado_id": "OAB",
+        "nome": "Nome",
+        "receita_advogado": "Receita Advogado",
+        "imposto": "Imposto",
+        "custo_direto_anual": "Custo Direto Anual",
+        "custo_fixo_rateado": "Custo Fixo Rateado",
+        "resultado_liquido": "Resultado Líquido",
+        "receita_necessaria_positivo": "Receita Necessária p/ Equilibrar"
+    })
 
-        st.dataframe(resultado_formatado, hide_index=True)
+    # Formatação específica para a coluna já renomeada
+    if "Receita Necessária p/ Equilibrar" in resultado_formatado.columns:
+        resultado_formatado["Receita Necessária p/ Equilibrar"] = resultado_formatado["Receita Necessária p/ Equilibrar"].apply(
+            lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if x not in ["", None] and pd.notna(x) and x != 0 else ""
+        )
 
-        with st.expander("📈 Visualização Gráfica", expanded=True):
-            nomes_adv = resultado_df["nome"].unique().tolist()
-            adv_selecionado = st.selectbox("Selecione um advogado", nomes_adv, key="graf_adv")
+    st.dataframe(resultado_formatado, hide_index=True)
 
-            dados_adv = resultado_df[resultado_df["nome"] == adv_selecionado].iloc[0]
+    with st.expander("📈 Visualização Gráfica", expanded=True):
+        nomes_adv = resultado_df["nome"].unique().tolist()
+        adv_selecionado = st.selectbox("Selecione um advogado", nomes_adv, key="graf_adv")
 
-            labels = ["Receita", "Imposto", "Custo Direto", "Custo Fixo", "Resultado"]
-            valores = [
-                dados_adv["receita_advogado"],
-                -dados_adv["imposto"],
-                -dados_adv["custo_direto_anual"],
-                -dados_adv["custo_fixo_rateado"],
-                dados_adv["resultado_liquido"]
-            ]
-            # Define cor da receita como azul e resultado conforme positivo/negativo
-            cor_resultado = "green" if dados_adv["resultado_liquido"] >= 0 else "red"
-            cores = ["blue", "purple", "orange", "gray", cor_resultado]
+        dados_adv = resultado_df[resultado_df["nome"] == adv_selecionado].iloc[0]
 
-            fig, ax = plt.subplots(figsize=(8, 5))
-            ax.bar(labels, valores, color=cores)
+        labels = ["Receita", "Imposto", "Custo Direto", "Custo Fixo", "Resultado"]
+        valores = [
+            dados_adv["receita_advogado"],
+            -dados_adv["imposto"],
+            -dados_adv["custo_direto_anual"],
+            -dados_adv["custo_fixo_rateado"],
+            dados_adv["resultado_liquido"]
+        ]
+        # Define cor da receita como azul e resultado conforme positivo/negativo
+        cor_resultado = "green" if dados_adv["resultado_liquido"] >= 0 else "red"
+        cores = ["blue", "purple", "orange", "gray", cor_resultado]
 
-            ax.yaxis.set_major_formatter(mtick.FuncFormatter(
-                lambda x, _: f'R$ {x:,.0f}'.replace(",", "X").replace(".", ",").replace("X", ".")
-            ))
-            ax.set_title(f"🔍 Resumo Financeiro - {adv_selecionado}")
-            ax.axhline(0, color='gray', linewidth=0.8)
-            st.pyplot(fig)
+        fig, ax = plt.subplots(figsize=(8, 5))
+        ax.bar(labels, valores, color=cores)
+
+        ax.yaxis.set_major_formatter(mtick.FuncFormatter(
+            lambda x, _: f'R$ {x:,.0f}'.replace(",", "X").replace(".", ",").replace("X", ".")
+        ))
+        ax.set_title(f"🔍 Resumo Financeiro - {adv_selecionado}")
+        ax.axhline(0, color='gray', linewidth=0.8)
+        st.pyplot(fig)
