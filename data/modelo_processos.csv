@@ -1,0 +1,4 @@
+processo_id,valor_recebido,advogado_id,participacao (%)
+PROC001,50000.00,12345,100.0
+PROC002,30000.00,67890,50.0
+PROC002,30000.00,12345,50.0
